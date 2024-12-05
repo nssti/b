@@ -1,0 +1,719 @@
+openapi: 3.0.3
+info:
+  title: Ru.Poizon API
+  version: "1.0.0"
+  description: API для работы с Ru.Poizon, включая управление товарами, заказами и корзиной.
+
+servers:
+  - url: https://api.rupoizon.com
+    description: Основной сервер API
+
+tags:
+  - name: auth
+    description: Методы аутентификации и регистрации
+  - name: products
+    description: Управление товарами и их фильтрация
+  - name: cart
+    description: Работа с корзиной
+  - name: orders
+    description: Создание и управление заказами
+  - name: payment
+    description: Оплата заказов
+  - name: admin
+    description: Административные операции
+
+paths:
+  /api/auth/login:
+    post:
+      tags:
+        - auth
+      summary: Вход пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Некорректный запрос
+        "401":
+          description: Неверные учетные данные
+
+  /api/auth/register:
+    post:
+      tags:
+        - auth
+      summary: Регистрация пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Успешная регистрация
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Ошибка валидации данных
+
+  /api/products:
+    get:
+      tags:
+        - products
+      summary: Получение списка товаров
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Успешный запрос
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+        "401":
+          description: Пользователь не авторизован
+
+  /api/products/search:
+    get:
+      tags:
+        - products
+      summary: Поиск товаров по названию
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+          description: Текст для поиска в названии товара
+      responses:
+        "200":
+          description: Список найденных товаров
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+        "401":
+          description: Пользователь не авторизован
+
+  /api/products/filters:
+    get:
+      tags:
+        - products
+      summary: Фильтрация товаров
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Фильтр по категории
+        - name: priceMin
+          in: query
+          schema:
+            type: number
+          description: Минимальная цена
+        - name: priceMax
+          in: query
+          schema:
+            type: number
+          description: Максимальная цена
+        - name: brand
+          in: query
+          schema:
+            type: string
+          description: Фильтр по бренду
+      responses:
+        "200":
+          description: Список товаров по фильтрам
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+        "401":
+          description: Пользователь не авторизован
+
+  /api/stock/{id}:
+    get:
+      tags:
+        - products
+      summary: Проверка наличия товара
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Идентификатор товара
+      responses:
+        "200":
+          description: Наличие товара
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inStock:
+                    type: boolean
+                  quantity:
+                    type: integer
+        "404":
+          description: Товар не найден
+        "401":
+          description: Пользователь не авторизован
+
+  /api/cart:
+    get:
+      tags:
+        - cart
+      summary: Получение содержимого корзины
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Успешный запрос
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cart"
+        "401":
+          description: Пользователь не авторизован
+
+    put:
+      tags:
+        - cart
+      summary: Обновление количества товара в корзине
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                productId:
+                  type: string
+                  description: Идентификатор товара
+                quantity:
+                  type: integer
+                  description: Количество товара
+                idempotencyKey:
+                  type: string
+                  description: Уникальный ключ для обеспечения иденпотентности
+              required:
+                - productId
+                - quantity
+                - idempotencyKey
+      responses:
+        "200":
+          description: Количество товара обновлено
+        "400":
+          description: Некорректный запрос
+        "401":
+          description: Пользователь не авторизован
+        "409":
+          description: Дублирование запроса (идентификатор уже использован)
+
+    delete:
+      tags:
+        - cart
+      summary: Удаление товара из корзины
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Товар успешно удален
+        "400":
+          description: Некорректный запрос
+        "401":
+          description: Пользователь не авторизован
+
+
+  /api/order:
+    post:
+      tags:
+        - orders
+      summary: Создание нового заказа
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/CartItemRequest"
+                address:
+                  type: string
+                  description: Адрес доставки
+                paymentMethod:
+                  type: string
+                  description: Способ оплаты
+                idempotencyKey:
+                  type: string
+                  description: Уникальный ключ для обеспечения иденпотентности
+              required:
+                - items
+                - address
+                - paymentMethod
+                - idempotencyKey
+      responses:
+        "201":
+          description: Заказ создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          description: Ошибка валидации данных
+        "401":
+          description: Пользователь не авторизован
+        "409":
+          description: Дублирование запроса (идентификатор уже использован)
+
+
+  /api/payment:
+    post:
+      tags:
+        - payment
+      summary: Оплата заказа
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                  description: Идентификатор заказа
+                paymentMethod:
+                  type: string
+                  description: Способ оплаты
+                idempotencyKey:
+                  type: string
+                  description: Уникальный ключ для обеспечения иденпотентности
+              required:
+                - orderId
+                - paymentMethod
+                - idempotencyKey
+      responses:
+        "200":
+          description: Оплата успешна
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "400":
+          description: Ошибка оплаты
+        "401":
+          description: Пользователь не авторизован
+        "409":
+          description: Дублирование запроса (идентификатор уже использован)
+
+  /api/admin/products:
+    get:
+      tags:
+        - admin
+      summary: Получение списка товаров для управления
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Список товаров
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+        "401":
+          description: Пользователь не авторизован
+    post:
+      tags:
+        - admin
+      summary: Добавление нового товара
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductCreateRequest"
+      responses:
+        "201":
+          description: Товар добавлен
+        "400":
+          description: Некорректный запрос
+        "401":
+          description: Пользователь не авторизован
+
+  /api/admin/products/{id}:
+    patch:
+      tags:
+        - admin
+      summary: Обновление информации о товаре
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Идентификатор товара
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdateRequest"
+      responses:
+        "200":
+          description: Товар обновлен
+        "400":
+          description: Некорректный запрос
+        "404":
+          description: Товар не найден
+        "401":
+          description: Пользователь не авторизован
+    delete:
+      tags:
+        - admin
+      summary: Удаление товара
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Идентификатор товара
+      responses:
+        "204":
+          description: Товар удален
+        "404":
+          description: Товар не найден
+        "401":
+          description: Пользователь не авторизован
+
+  /api/admin/orders:
+    get:
+      tags:
+        - admin
+      summary: Получение списка заказов для управления
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Список заказов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderResponse"
+        "401":
+          description: Пользователь не авторизован
+    patch:
+      tags:
+        - admin
+      summary: Изменение статуса заказа
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderStatusUpdateRequest"
+      responses:
+        "200":
+          description: Статус заказа обновлен
+        "400":
+          description: Некорректный запрос
+        "404":
+          description: Заказ не найден
+        "401":
+          description: Пользователь не авторизован
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Электронная почта пользователя
+        password:
+          type: string
+          format: password
+          description: Пароль пользователя
+      required:
+        - email
+        - password
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Электронная почта нового пользователя
+        password:
+          type: string
+          format: password
+          description: Пароль нового пользователя
+        name:
+          type: string
+          description: Имя пользователя
+      required:
+        - email
+        - password
+        - name
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT токен для аутентификации
+        userId:
+          type: string
+          description: Идентификатор пользователя
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Уникальный идентификатор товара
+        name:
+          type: string
+          description: Название товара
+        description:
+          type: string
+          description: Описание товара
+        price:
+          type: number
+          format: float
+          description: Цена товара
+        category:
+          type: string
+          description: Категория товара
+        brand:
+          type: string
+          description: Бренд товара
+        inStock:
+          type: boolean
+          description: Наличие товара на складе
+        quantity:
+          type: integer
+          description: Количество на складе
+
+    Cart:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CartItem"
+        totalPrice:
+          type: number
+          format: float
+          description: Общая стоимость товаров в корзине
+
+    CartItem:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Идентификатор товара
+        name:
+          type: string
+          description: Название товара
+        quantity:
+          type: integer
+          description: Количество товара
+        price:
+          type: number
+          format: float
+          description: Цена товара
+
+    CartItemRequest:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Идентификатор товара
+        quantity:
+          type: integer
+          description: Количество товара
+      required:
+        - productId
+        - quantity
+
+    OrderRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CartItemRequest"
+        address:
+          type: string
+          description: Адрес доставки
+        paymentMethod:
+          type: string
+          description: Способ оплаты
+      required:
+        - items
+        - address
+        - paymentMethod
+
+    OrderResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: Уникальный идентификатор заказа
+        status:
+          type: string
+          description: Статус заказа
+        totalPrice:
+          type: number
+          format: float
+          description: Общая стоимость заказа
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата и время создания заказа
+
+    OrderStatusUpdateRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Новый статус заказа
+      required:
+        - status
+
+    PaymentRequest:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: Идентификатор заказа
+        paymentMethod:
+          type: string
+          description: Способ оплаты
+      required:
+        - orderId
+        - paymentMethod
+
+    PaymentResponse:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          description: Идентификатор оплаты
+        status:
+          type: string
+          description: Статус оплаты
+        amount:
+          type: number
+          format: float
+          description: Сумма оплаты
+
+    ProductCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Название товара
+        description:
+          type: string
+          description: Описание товара
+        price:
+          type: number
+          format: float
+          description: Цена товара
+        category:
+          type: string
+          description: Категория товара
+        brand:
+          type: string
+          description: Бренд товара
+        quantity:
+          type: integer
+          description: Количество на складе
+      required:
+        - name
+        - price
+        - category
+        - quantity
+
+    ProductUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Название товара
+        description:
+          type: string
+          description: Описание товара
+        price:
+          type: number
+          format: float
+          description: Цена товара
+        category:
+          type: string
+          description: Категория товара
+        brand:
+          type: string
+          description: Бренд товара
+        quantity:
+          type: integer
+          description: Количество на складе

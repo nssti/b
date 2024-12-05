@@ -1,0 +1,58 @@
+@startuml
+actor "Пользователь" as user
+participant "Система Poizon на русском" as poizon
+participant "Система управления товарами" as inventory
+participant "Система доставки" as delivery
+participant "Система оплаты" as payment
+
+user -> poizon: Просмотр каталога товаров
+activate poizon
+poizon -> inventory: Запрос списка доступных товаров
+activate inventory
+inventory --> poizon: Возврат списка товаров
+deactivate inventory
+poizon --> user: Показать доступные товары
+deactivate poizon
+
+user -> poizon: Добавить товар в корзину
+activate poizon
+poizon --> user: Подтверждение добавления товара
+deactivate poizon
+
+user -> poizon: Оформить заказ
+activate poizon
+poizon -> user: Запрос информации для выбора доставки
+deactivate poizon
+
+user -> poizon: Выбор способа и сроков доставки
+activate poizon
+poizon -> delivery: Запрос на проверку возможностей доставки
+activate delivery
+delivery --> poizon: Подтверждение возможности доставки
+deactivate delivery
+
+alt Доставка возможна
+poizon --> user: Подтверждение выбранного способа доставки
+deactivate poizon
+
+user -> poizon: Ввод данных платежа
+activate poizon
+poizon -> payment: Проверка платежных данных
+
+alt Успешная обработка платежа
+payment --> poizon: Подтверждение успешного платежа
+
+poizon -> delivery: Запрос на организацию доставки
+activate delivery
+delivery --> poizon: Подтверждение доставки
+deactivate delivery
+poizon --> user: Подтверждение заказа и доставки
+else Ошибка при обработке платежа
+payment --> poizon: Ошибка обработки платежа
+poizon -> user: Сообщение об ошибке оплаты
+end
+else Доставка невозможна
+delivery --> poizon: Ошибка возможности доставки
+poizon -> user: Сообщение об ошибке доставки
+end
+@enduml
